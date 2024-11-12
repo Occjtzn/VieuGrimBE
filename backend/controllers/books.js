@@ -71,18 +71,19 @@ exports.ratingBook = (req, res, next) => {
         .then(book => {
             if (!book) return Promise.reject({ status: 404, message: "Livre non trouvé." });
 
-            const existingRating = book.ratings.find(r => r.userId === userId);
-            if (existingRating) {
+            if (book.ratings.some(r => r.userId === userId)) {
                 return Promise.reject({ status: 400, message: "Vous avez déjà noté ce livre." });
             }
 
             book.ratings.push({ userId, grade: rating });
-            book.averageRating = book.ratings.reduce((sum, r) => sum + r.grade, 0) / book.ratings.length;
+            const total = book.ratings.reduce((sum, r) => sum + r.grade, 0);
+            book.averageRating = Math.round((total / book.ratings.length) * 10) / 10;
             return book.save();
         })
         .then(updatedBook => res.status(200).json(updatedBook))
         .catch(error => res.status(error.status || 500).json({ error: error.message || error }));
 };
+
 
 
 
@@ -95,6 +96,29 @@ exports.bestRatingBook = (req, res, next) => {
         .then(books => res.status(200).json(books))
         .catch(error => res.status(400).json({ error: error }));
 
+};
+
+exports.modifyBook = (req, res, next) => {
+
+    const bookObject = req.file ? {
+        ...JSON.parse(req.body.thing),
+        imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`
+    } : { ...req.body };
+
+    delete bookObject._userId;
+    Book.findOne({ _id: req.params.id })
+        .then((book) => {
+            if (book.userId != req.auth.userId) {
+                res.status(401).json({ message: 'Not authorized' });
+            } else {
+                Book.updateOne({ _id: req.params.id }, { ...bookObject, _id: req.params.id })
+                    .then(() => res.status(200).json({ message: 'Objet modifié' }))
+                    .catch(error => res.status(401).json({ error }));
+            }
+        })
+        .catch((error) => {
+            res.status(400).json({ error });
+        });
 };
 
 exports.deleteBook = (req, res, next) => {
